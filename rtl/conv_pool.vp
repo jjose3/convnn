@@ -1,0 +1,201 @@
+//Convolutional Neural Networks Design
+// Perl statements with Verilog used
+// conv_pool.vp
+
+//Perl initial declaration
+
+//; use strict ; # Use a strict interpretation
+//; use warnings FATAL=>qw(all); # Turn warnings into errors
+//; use diagnostics ; # Print helpful info, for errors
+
+
+//; my $pD = parameter( name=>"pixelDepth", val=>8, doc=>"Depth of pixel");
+//; my $kL = parameter( name=>"kernelLength", val=>3, doc=>"Length of kernel");
+//; my $iL = parameter( name=>"imageLength", val=>4, doc=>"Length of image");
+//; my $iB = parameter( name=>"imageBreadth", val=>4, doc=>"Breadth of image");
+//; my $nP = $iL * $iB ;
+
+//Module declaration
+module `mname` (clk, image_4x4, shift, conv_kernel, y);
+	input logic clk;
+	input logic [`($nP*$pD)-1`:0] image_4x4;
+	input logic [`(($kL*$kL)*$pD)-1`:0] conv_kernel;
+	input logic [1:0] shift;
+	output logic [`$pD-1`:0] y;
+ 
+logic [`($nP*$pD)-1`:0] image_4x4_ff;
+logic [`(($kL*$kL)*$pD)-1`:0] conv_kernel_ff;
+logic [1:0] shift_ff;
+logic [`$pD-1`:0] y_ff;
+//; for( my $i = 0 ; $i < 4 ; $i++ ){
+	//; for( my $j = 0 ; $j < 4 ; $j++ ){
+logic [`$pD-1`:0] x_`$i.$j`;
+//;}}
+//; for( my $i = 0 ; $i < 3 ; $i++ ){
+	//; for( my $j = 0 ; $j < 3 ; $j++ ){
+logic [`$pD-1`:0] k_`$i.$j`;
+//;}}
+//; for( my $i = 0 ; $i < 3 ; $i++ ){
+	//; for( my $j = 0 ; $j < 3 ; $j++ ){
+logic [`2*$pD`:0] c0_`$i.$j`;
+logic [`2*$pD`:0] c1_`$i.$j`;
+logic [`2*$pD`:0] c2_`$i.$j`;
+logic [`2*$pD`:0] c3_`$i.$j`;
+//;}}
+logic [`2*$pD+9`:0] c0_sum, c1_sum, c2_sum, c3_sum;
+logic [`2*$pD+9`:0] c0_shft, c1_shft, c2_shft, c3_shft;
+logic [`$pD-1`:0] c0_bound, c1_bound, c2_bound, c3_bound;
+logic [`$pD-1`:0] y_max1, y_max2, y_max;
+
+
+//; for( my $i = 0 ; $i < 4 ; $i++ ){
+	//; for( my $j = 0 ; $j < 4 ; $j++ ){
+assign x_`$i.$j` = image_4x4_ff[`$i*32+$j*8+7`:`$i*32+$j*8`];
+//;}}
+//; for( my $i = 0 ; $i < 3 ; $i++ ){
+	//; for( my $j = 0 ; $j < 3 ; $j++ ){
+assign k_`$i.$j` = conv_kernel[`$i*24+$j*8+7`:`$i*24+$j*8`];
+//;}}
+
+//; for( my $i = 0 ; $i < 3 ; $i++ ){
+	//; for( my $j = 0 ; $j < 3 ; $j++ ){
+assign c0_`$i.$j` = $signed({1'b0,x_`$i.$j`})*$signed({k_`$i.$j`[7],k_`$i.$j`});
+//;}}
+
+//; for( my $i = 0 ; $i < 3 ; $i++ ){
+	//; for( my $j = 0 ; $j < 3 ; $j++ ){
+assign c1_`$i.$j` = $signed({1'b0,x_`$i.($j+1)`})*$signed({k_`$i.$j`[7],k_`$i.$j`});
+//;}}
+
+//; for( my $i = 0 ; $i < 3 ; $i++ ){
+	//; for( my $j = 0 ; $j < 3 ; $j++ ){
+assign c2_`$i.$j` = $signed({1'b0,x_`($i+1).$j`})*$signed({k_`$i.$j`[7],k_`$i.$j`});
+//;}}
+
+//; for( my $i = 0 ; $i < 3 ; $i++ ){
+	//; for( my $j = 0 ; $j < 3 ; $j++ ){
+assign c3_`$i.$j` = $signed({1'b0,x_`($i+1).($j+1)`})*$signed({k_`$i.$j`[7],k_`$i.$j`});
+//;}}
+
+//sum of all the convolution
+assign c0_sum = $signed(c0_00) + $signed(c0_01) + $signed(c0_02) + $signed(c0_10) + $signed(c0_11) + $signed(c0_12) + $signed(c0_20) + $signed(c0_21) + $signed(c0_22);
+assign c1_sum = $signed(c1_00) + $signed(c1_01) + $signed(c1_02) + $signed(c1_10) + $signed(c1_11) + $signed(c1_12) + $signed(c1_20) + $signed(c1_21) + $signed(c1_22);
+assign c2_sum = $signed(c2_00) + $signed(c2_01) + $signed(c2_02) + $signed(c2_10) + $signed(c2_11) + $signed(c2_12) + $signed(c2_20) + $signed(c2_21) + $signed(c2_22);
+assign c3_sum = $signed(c3_00) + $signed(c3_01) + $signed(c3_02) + $signed(c3_10) + $signed(c3_11) + $signed(c3_12) + $signed(c3_20) + $signed(c3_21) + $signed(c3_22);
+
+//normalize all the convolution
+always_comb begin
+    case (shift_ff)
+        2'b00: c0_shft = c0_sum[`2*$pD+9`:0];
+        2'b01: c0_shft = {c0_sum[`2*$pD+9`:`2*$pD+9`],c0_sum[`2*$pD+9`:1]};
+        2'b10: c0_shft = {{2{c0_sum[`2*$pD+9`:`2*$pD+9`]}},c0_sum[`2*$pD+9`:2]};
+        2'b11: c0_shft = {{3{c0_sum[`2*$pD+9`:`2*$pD+9`]}},c0_sum[`2*$pD+9`:3]};
+    endcase
+end
+
+always_comb begin
+    case (shift_ff)
+        2'b00: c1_shft = c1_sum[`2*$pD+9`:0];
+        2'b01: c1_shft = {c1_sum[`2*$pD+9`:`2*$pD+9`],c1_sum[`2*$pD+9`:1]};
+        2'b10: c1_shft = {{2{c1_sum[`2*$pD+9`:`2*$pD+9`]}},c1_sum[`2*$pD+9`:2]};
+        2'b11: c1_shft = {{3{c1_sum[`2*$pD+9`:`2*$pD+9`]}},c1_sum[`2*$pD+9`:3]};
+    endcase
+end
+
+always_comb begin
+    case (shift_ff)
+        2'b00: c2_shft = c2_sum[`2*$pD+9`:0];
+        2'b01: c2_shft = {c2_sum[`2*$pD+9`:`2*$pD+9`],c2_sum[`2*$pD+9`:1]};
+        2'b10: c2_shft = {{2{c2_sum[`2*$pD+9`:`2*$pD+9`]}},c2_sum[`2*$pD+9`:2]};
+        2'b11: c2_shft = {{3{c2_sum[`2*$pD+9`:`2*$pD+9`]}},c2_sum[`2*$pD+9`:3]};
+    endcase
+end
+
+always_comb begin
+    case (shift_ff)
+        2'b00: c3_shft = c3_sum[`2*$pD+9`:0];
+        2'b01: c3_shft = {c3_sum[`2*$pD+9`:`2*$pD+9`],c3_sum[`2*$pD+9`:1]};
+        2'b10: c3_shft = {{2{c3_sum[`2*$pD+9`:`2*$pD+9`]}},c3_sum[`2*$pD+9`:2]};
+        2'b11: c3_shft = {{3{c3_sum[`2*$pD+9`:`2*$pD+9`]}},c3_sum[`2*$pD+9`:3]};
+    endcase
+end
+
+//bound all the normalized convolutions
+always_comb begin
+    if($signed(c0_shft) < 0) begin
+        c0_bound = `$pD`'h00;
+    end else if($signed(c0_shft) > 255) begin
+        c0_bound = `$pD`'d255;
+    end else begin
+        c0_bound = c0_shft[`$pD-1`:0];
+    end
+end
+
+always_comb begin
+    if($signed(c1_shft) < 0) begin
+        c1_bound = `$pD`'h00;
+    end else if($signed(c1_shft) > 255) begin
+        c1_bound = `$pD`'d255;
+    end else begin
+        c1_bound = c1_shft[`$pD-1`:0];
+    end
+end
+
+always_comb begin
+    if($signed(c2_shft) < 0) begin
+        c2_bound = `$pD`'h00;
+    end else if($signed(c2_shft) > 255) begin
+        c2_bound = `$pD`'d255;
+    end else begin
+        c2_bound = c2_shft[`$pD-1`:0];
+    end
+end
+
+always_comb begin
+    if($signed(c3_shft) < 0) begin
+        c3_bound = `$pD`'h00;
+    end else if($signed(c3_shft) > 255) begin
+        c3_bound = `$pD`'d255;
+    end else begin
+        c3_bound = c3_shft[`$pD-1`:0];
+    end
+end
+
+//Find max of all convolutions
+always_comb begin
+    if(c0_bound > c1_bound) y_max1 = c0_bound;
+    else y_max1 = c1_bound;
+end
+
+always_comb begin
+    if(c2_bound > c3_bound) y_max2 = c2_bound;
+    else y_max2 = c3_bound;
+end
+
+always_comb begin
+    if(y_max2 > y_max1) y_max = y_max2;
+    else y_max = y_max1;
+end
+
+assign y_ff = y_max;
+
+// Input/Output flops instantiations
+//; for( my $i = 0 ; $i < $nP*$pD ; $i++ ){
+//;  my $dff = generate_base( "dff" , "D_FLIP_FLOP_IMAGE_4x4".$i);
+`$dff->instantiate()` ( .din(image_4x4[`$i`]), .clk, .q(image_4x4_ff[`$i`]) );
+//; }
+//; for( my $i = 0 ; $i < ($kL*$kL)*$pD ; $i++ ){
+//;  my $dff = generate_base( "dff" , "D_FLIP_FLOP_CONV_KERNEL".$i);
+`$dff->instantiate()` ( .din(conv_kernel[`$i`]), .clk, .q(conv_kernel_ff[`$i`]) );
+//; }
+//; for( my $i = 0 ; $i < 2 ; $i++ ){
+//;  my $dff = generate_base( "dff" , "D_FLIP_FLOP_SHIFT".$i);
+`$dff->instantiate()` ( .din(shift[`$i`]), .clk, .q(shift_ff[`$i`]) );
+//; }
+//; for( my $i = 0 ; $i < $pD ; $i++ ){
+//;  my $dff = generate_base( "dff" , "D_FLIP_FLOP_Y".$i);
+`$dff->instantiate()` ( .din(y_ff[`$i`]), .clk, .q(y[`$i`]) );
+//; }
+
+
+endmodule: `mname`

@@ -1,0 +1,81 @@
+//top_seqRoot.vp
+
+
+module `mname` ();
+
+//; my $dut = generate_base("conv_pool", "my_conv_pool");
+//; my $pD = $dut->get_param("pixelDepth");
+//; my $kL = $dut->get_param("kernelLength");
+//; my $iL = $dut->get_param("imageLength");
+//; my $iB = $dut->get_param("imageBreadth");
+//; my $nP = $iL * $iB ;
+
+//; my $gb = generate("generic_bench", "BASIC_BENCH");
+
+//; my $pc = generate("cycle_counter", "PERF_COUNT", CycleName=>"multRate_cyc");
+//; my $ec = generate("cycle_counter", "ERROR_COUNT", CountName=>"mult_err_cnt");
+
+    logic clk, rst;
+    logic [`($nP*$pD)-1`:0] image_4x4;
+    logic [`(($kL*$kL)*$pD)-1`:0] conv_kernel;
+    logic [1:0] shift;
+    logic  [`$pD-1`:0] y;
+
+
+    logic             r_err ;
+
+    logic             triggerStart;
+    logic             triggerStop;
+    int               seed;
+    int               clk_period, scan_file, finput, foutput ;
+
+    // Instantiate the design under test and basic bench
+    `$dut->instantiate()` (.*);
+    `$gb->instantiate()`  (.*);
+    //;##`$pc->instantiate()`  (.triggerStart(perf), .triggerStop(triggerStop), .increment(r_vld), .clk(clk), .rst(rst) );
+    `$ec->instantiate()`  (.triggerStart(triggerStart), .triggerStop(triggerStop), .increment(r_err), .clk(clk), .rst(rst) );
+
+    // Simulation Narrative
+    initial begin
+        finput = $fopen("../conv_pool.input", "r"); //Opening input text file
+        //finput = $fopen("./conv_pool.debug", "r"); //Opening input text file
+        foutput = $fopen("./conv_pool.output", "w"); //Opening output text file
+        //foutput = $fopen("./conv_pool.opdebug", "w"); //Opening output text file
+    	triggerStart  = 1'b0 ;
+    	triggerStop = 1'b0 ;
+    	repeat(10) @(posedge clk );
+    	triggerStart  = 1'b1 ;
+	    repeat(65637) @(posedge clk );
+	    //repeat(20) @(posedge clk );
+    	triggerStop = 1'b1 ;
+    	repeat(10) @(posedge clk);
+    	$finish();
+    end
+
+    //Reading input file
+    always @(negedge clk) begin
+	    if( triggerStart && ~triggerStop) begin
+        	if (!$feof(finput)) begin
+  	            scan_file = $fscanf(finput, "%h\t%h\t%b\n", image_4x4, conv_kernel, shift);
+                //$display("image_4x4=%h,conv_kernel=%h,shift=%b",image_4x4, conv_kernel, shift);
+  	    	end
+	    end
+        else begin
+            image_4x4 = `($nP*$pD)`'h00;
+            conv_kernel = `(($kL*$kL)*$pD)`'h00;
+            shift = 2'b00;
+        end
+    end
+
+    // Verification
+    always @( posedge clk ) begin
+        if( triggerStart && ~triggerStop) begin
+    	    #1
+    	    // Wait one tick to see what was flopped
+            $fwrite(foutput,"%X\n",y);
+            $display("y = %X", y);
+            r_err = 1'b0 ;
+        end
+    end
+
+endmodule 

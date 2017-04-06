@@ -1,0 +1,23 @@
+// dff.vp
+//; my $bW = parameter(Name=>"BitWidth", Val=>1);
+module `mname` (
+input logic [`$bW-1`:0] din,
+input logic clk,
+output logic [`$bW-1`:0] q
+);
+
+  /* synopsys dc_tcl_script_begin
+   set_dont_retime [current_design] true
+   set_optimize_registers false -design [current_design]
+  */
+
+          logic [`$bW-1`:0] q_val;
+          logic [`$bW-1`:0] d;
+
+          assign    d = din ; // Delay data in to prevent inf. loops
+          assign    q = q_val ;
+
+          always @ (posedge clk) begin  //Latches on RST or CLK
+             q_val <= d ;
+          end
+endmodule: `mname`
